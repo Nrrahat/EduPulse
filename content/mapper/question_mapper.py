@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import ollama
 
-def map_questions(model_name: str = "qwen2-vl"):
+def map_questions(model_name: str = "moondream"):
     root_dir = Path(__file__).resolve().parent.parent.parent
     q_md_folder = root_dir / "content" / "questions" / "markdown"
     topics_file = root_dir / "data" / "topics.json"
@@ -31,7 +31,7 @@ def map_questions(model_name: str = "qwen2-vl"):
     mappings = []
 
     for q_file in q_files:
-        print(f"🗺️ Mapping questions for: {q_file.name}...")
+        print(f"🗺️ Mapping questions for: {q_file.name} using {model_name}...")
         with open(q_file, "r", encoding="utf-8") as f:
             q_text = f.read()
 
@@ -77,16 +77,16 @@ Return JSON with key "questions".
     # 1. Save metadata
     q_meta_file.parent.mkdir(parents=True, exist_ok=True)
     with open(q_meta_file, "w", encoding="utf-8") as f:
-        json.dump({"questions_metadata": parsed_questions}, f, indent=2)
+        json.dump({"questions_metadata": parsed_questions}, f, indent=2, ensure_ascii=False)
 
     # 2. Save runtime data/questions.json
     runtime_questions.parent.mkdir(parents=True, exist_ok=True)
     with open(runtime_questions, "w", encoding="utf-8") as f:
-        json.dump({"questions": parsed_questions}, f, indent=2)
+        json.dump({"questions": parsed_questions}, f, indent=2, ensure_ascii=False)
 
     # 3. Save runtime data/mappings.json
     with open(runtime_mappings, "w", encoding="utf-8") as f:
-        json.dump({"mappings": mappings}, f, indent=2)
+        json.dump({"mappings": mappings}, f, indent=2, ensure_ascii=False)
 
     print(f"✅ Published: {runtime_questions}")
     print(f"✅ Published: {runtime_mappings}")
