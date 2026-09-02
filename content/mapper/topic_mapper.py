@@ -1,18 +1,28 @@
-"""
-content/mapper/topic_mapper.py
-Reads document Markdown, extracts taxonomy via Ollama, 
-and publishes content/metadata/chapter_metadata.json & data/topics.json
-"""
-
 import json
 from pathlib import Path
 import ollama
+from pydantic import BaseModel, Field
 
-def map_topics(model_name: str = "moondream"):
+
+# --- Schema for Bangla Taxonomy Extraction ---
+class TopicSchema(BaseModel):
+    topic_name: str = Field(description="টপিকের নাম (বাংলায়)")
+    subtopics: list[str] = Field(description="সাব-টপিকের তালিকা (বাংলায়)")
+
+
+class ChapterSchema(BaseModel):
+    chapter_name: str = Field(description="অধ্যায়ের নাম (বাংলায়)")
+    topics: list[TopicSchema] = Field(description="এই অধ্যায়ের অধীনে টপিকের তালিকা")
+
+
+class TaxonomySchema(BaseModel):
+    chapters: list[ChapterSchema] = Field(description="নিষ্কাশিত অধ্যায়গুলির তালিকা")
+
+
+def map_topics(model_name: str = "qwen2.5:7b"):
     root_dir = Path(__file__).resolve().parent.parent.parent
     md_folder = root_dir / "content" / "documents" / "markdown"
-    meta_file = root_dir / "content" / "metadata" / "chapter_metadata.json"
-    runtime_topics_file = root_dir / "data" / "topics.json"
+    topics_file = root_dir / "data" / "topics.json"
 
     md_files = list(md_folder.glob("*.md"))
     if not md_files:
@@ -22,41 +32,43 @@ def map_topics(model_name: str = "moondream"):
     all_chapters = []
 
     for md_file in md_files:
-        print(f"🗺️ Mapping taxonomy for: {md_file.name} using {model_name}...")
+        print(f"🗺️ Mapping Bangla taxonomy for: {md_file.name} using {model_name}...")
+        
         with open(md_file, "r", encoding="utf-8") as f:
             text = f.read()
 
         prompt = f"""
-Analyze this document text and organize it strictly into a structured JSON hierarchy:
-Chapter -> Topics -> Subtopics.
+        নিচের ডকুমেন্টটি বিশ্লেষণ করুন এবং বাংলায় অধ্যায়, টপিক এবং সাব-টপিকের কাঠামোগত JSON তৈরি করুন।
+        সব টপিক এবং সাব-টপিকের নাম অবশ্যই মূল ডকুমেন্টের বাংলা ভাষায় রাখুন।
 
-Text:
-{text[:4000]}
-
-Return valid JSON with key "chapter_name", "topics" (list containing topic_name and subtopics list).
-"""
-
-        response = ollama.chat(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            format="json"
-        )
+        ডকুমেন্টের বিষয়বস্তু (Document Content):
+        {text}
+        """
 
         try:
+            # Enforce schema constraint via Ollama structured output
+            response = ollama.chat(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                format=TaxonomySchema.model_json_schema()
+            )
+
             parsed = json.loads(response["message"]["content"])
-            parsed["source_file"] = md_file.name
-            all_chapters.append(parsed)
+            
+            for chapter in parsed.get("chapters", []):
+                chapter["source_file"] = md_file.name
+                all_chapters.append(chapter)
+
         except Exception as e:
             print(f"❌ Error parsing metadata for {md_file.name}: {e}")
 
-    # Write to metadata
-    meta_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(meta_file, "w", encoding="utf-8") as f:
-        json.dump({"chapters": all_chapters}, f, indent=2, ensure_ascii=False)
-
-    # Write to data/topics.json
-    runtime_topics_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(runtime_topics_file, "w", encoding="utf-8") as f:
+    # Save master taxonomy with unicode support (ensure_ascii=False for Bangla characters)
+    topics_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(topics_file, "w", encoding="utf-8") as f:
         json.dump({"topics_data": all_chapters}, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ Published taxonomy to: {runtime_topics_file}")
+    print(f"✅ Master Bangla taxonomy published to: {topics_file}")
+
+
+if __name__ == "__main__":
+    map_topics()
